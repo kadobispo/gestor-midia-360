@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
@@ -73,10 +72,7 @@ def upload_imagem(arquivo):
     
 def excluir_imagem(url_imagem):
     try:
-        # Extrai o nome do arquivo da URL (ex: 'uuid.jpg')
         nome_arquivo = url_imagem.split('/')[-1]
-        
-        # Remove a imagem do bucket no Supabase
         supabase.storage.from_("fotos_midia").remove([nome_arquivo])
         return True
     except Exception as e:
@@ -90,6 +86,8 @@ def carregar_dados():
     # Limpando os valores vazios (NaN)
     if 'imagem_path' in df.columns:
         df['imagem_path'] = df['imagem_path'].fillna("")
+    if 'data_upload_foto' in df.columns:
+        df['data_upload_foto'] = df['data_upload_foto'].fillna("")
         
     return df
 
@@ -229,26 +227,28 @@ if st.session_state.midia_selecionada is not None and not df_completo.empty:
                         st.write("")
                         if st.button("🗑️ Deletar Ponto", key=f"del_{row['id']}", type="primary"):
                             supabase.table("campanhas").delete().eq("id", row['id']).execute()
-                            # Se tiver imagem, exclui do storage também
                             if row.get('imagem_path'):
                                 excluir_imagem(row['imagem_path'])
                             st.rerun()
 
                     st.info(f"**📣 Detalhe da Publicidade:** {row.get('publicidade', 'Não especificado')}")
 
-                    # EXIBIR IMAGEM SE EXISTIR NO BANCO
+                    # EXIBIR IMAGEM E DATA
                     if row.get('imagem_path'):
                         st.markdown("**📸 Foto do Ponto**")
+                        
+                        # Mostra a data do upload se existir
+                        if row.get('data_upload_foto'):
+                            st.markdown(f"<div style='font-size: 13px; color: #64748b; margin-bottom: 5px;'>🗓️ Enviada em: {row['data_upload_foto']}</div>", unsafe_allow_html=True)
+                            
                         st.image(row['imagem_path'], use_container_width=True)
                         
-                        # Opção para remover apenas a foto
                         st.markdown("<div class='btn-pequeno'>", unsafe_allow_html=True)
                         if st.button("❌ Remover Foto", key=f"rm_foto_{row['id']}"):
-                            # 1. Remove do storage
                             excluido = excluir_imagem(row['imagem_path'])
                             if excluido:
-                                # 2. Atualiza o banco de dados definindo imagem_path como NULL
-                                supabase.table("campanhas").update({"imagem_path": None}).eq("id", row['id']).execute()
+                                # Apaga a foto e a data do banco
+                                supabase.table("campanhas").update({"imagem_path": None, "data_upload_foto": None}).eq("id", row['id']).execute()
                                 st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -279,19 +279,23 @@ if st.session_state.midia_selecionada is not None and not df_completo.empty:
 
                             if st.form_submit_button("💾 Guardar Alterações"):
                                 url_nova_foto = row.get('imagem_path')
-                                # Se enviou uma nova foto, faz upload
+                                data_upload = row.get('data_upload_foto') # Mantém a data antiga se não trocar a foto
+                                
+                                # Se enviou uma nova foto
                                 if e_foto is not None:
-                                    # Opcional: Se já existia uma foto, exclui a antiga do storage para não ocupar espaço inútil
                                     if row.get('imagem_path'):
                                         excluir_imagem(row['imagem_path'])
                                         
                                     url_nova_foto = upload_imagem(e_foto)
+                                    # Pega a data de hoje no formato Brasileiro DD/MM/AAAA
+                                    data_upload = date.today().strftime("%d/%m/%Y")
                                     
                                 supabase.table("campanhas").update({
                                     "formato": e_formato, "parceiro_local": e_parceiro, "cidade": e_cidade,
                                     "responsavel": e_responsavel, "contato": e_contato, "valor": e_valor,
                                     "tipo_investimento": tipo_salvar, "data_fim": e_data, "publicidade": e_publicidade,
-                                    "imagem_path": url_nova_foto
+                                    "imagem_path": url_nova_foto,
+                                    "data_upload_foto": data_upload
                                 }).eq("id", row['id']).execute()
                                 st.rerun()
 
@@ -344,11 +348,16 @@ with st.expander("➕ REGISTAR NOVO PONTO MANUALMENTE"):
         if st.form_submit_button("Guardar Novo Registo"):
             if f_formato and f_parceiro:
                 url_foto_nova = upload_imagem(f_foto)
+                
+                # Só grava a data se o usuário tiver enviado uma foto
+                data_upload_nova = date.today().strftime("%d/%m/%Y") if url_foto_nova else None
+                
                 supabase.table("campanhas").insert({
                     "formato": f_formato, "parceiro_local": f_parceiro, "cidade": f_cidade, 
                     "contato": f_contato, "responsavel": f_responsavel, "data_fim": str(f_vencimento), 
                     "valor": f_valor, "tipo_investimento": tipo_salvar_novo, "status": f_status, 
-                    "publicidade": f_publicidade, "imagem_path": url_foto_nova
+                    "publicidade": f_publicidade, "imagem_path": url_foto_nova,
+                    "data_upload_foto": data_upload_nova
                 }).execute()
                 st.rerun()
 
@@ -365,6 +374,5 @@ with col_rodape1:
 
 with col_rodape3:
     if st.button("🚪 Sair do Sistema", use_container_width=True):
-        # Limpa a URL e recarrega a página para voltar à tela de bloqueio
         st.query_params.clear()
         st.rerun()
