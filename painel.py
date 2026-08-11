@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
@@ -8,7 +9,6 @@ from datetime import date
 # ==========================================
 # CONFIGURAÇÃO E ESTILIZAÇÃO
 # ==========================================
-
 st.markdown("""
     <style>
     header {visibility: hidden;}
@@ -30,6 +30,13 @@ st.markdown("""
     div[data-testid="stMetricLabel"] { font-size: 0.9rem !important; font-weight: 500 !important; color: #64748b !important; }
     .btn-discreto { text-decoration: none; font-size: 20px; color: #94a3b8; background: #f1f5f9; padding: 6px 12px; border-radius: 8px; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; }
     .btn-discreto:hover { background: #ffffff; color: #4f46e5; border-color: #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1); transform: scale(1.05); }
+    
+    /* Estilo para botões pequenos nas opções de foto */
+    .btn-pequeno > div > div > button {
+        height: 40px !important;
+        font-size: 14px !important;
+    }
+    
     @media print { .stButton, .btn-discreto, .stSelectbox, .stRadio, .stExpander { display: none !important; } }
     </style>
 """, unsafe_allow_html=True)
@@ -63,6 +70,18 @@ def upload_imagem(arquivo):
         url_imagem = supabase.storage.from_("fotos_midia").get_public_url(file_name)
         return url_imagem
     return None
+    
+def excluir_imagem(url_imagem):
+    try:
+        # Extrai o nome do arquivo da URL (ex: 'uuid.jpg')
+        nome_arquivo = url_imagem.split('/')[-1]
+        
+        # Remove a imagem do bucket no Supabase
+        supabase.storage.from_("fotos_midia").remove([nome_arquivo])
+        return True
+    except Exception as e:
+        st.error(f"Erro ao remover a imagem do Storage: {e}")
+        return False
 
 def carregar_dados():
     response = supabase.table("campanhas").select("*").execute()
@@ -204,6 +223,9 @@ if st.session_state.midia_selecionada is not None and not df_completo.empty:
                         st.write("")
                         if st.button("🗑️ Deletar Ponto", key=f"del_{row['id']}", type="primary"):
                             supabase.table("campanhas").delete().eq("id", row['id']).execute()
+                            # Se tiver imagem, exclui do storage também
+                            if row.get('imagem_path'):
+                                excluir_imagem(row['imagem_path'])
                             st.rerun()
 
                     st.info(f"**📣 Detalhe da Publicidade:** {row.get('publicidade', 'Não especificado')}")
@@ -212,6 +234,17 @@ if st.session_state.midia_selecionada is not None and not df_completo.empty:
                     if row.get('imagem_path'):
                         st.markdown("**📸 Foto do Ponto**")
                         st.image(row['imagem_path'], use_container_width=True)
+                        
+                        # Opção para remover apenas a foto
+                        st.markdown("<div class='btn-pequeno'>", unsafe_allow_html=True)
+                        if st.button("❌ Remover Foto", key=f"rm_foto_{row['id']}"):
+                            # 1. Remove do storage
+                            excluido = excluir_imagem(row['imagem_path'])
+                            if excluido:
+                                # 2. Atualiza o banco de dados definindo imagem_path como NULL
+                                supabase.table("campanhas").update({"imagem_path": None}).eq("id", row['id']).execute()
+                                st.rerun()
+                        st.markdown("</div>", unsafe_allow_html=True)
 
                     st.markdown("---")
                     with st.expander("✏️ Editar Dados e Anexar Foto"):
@@ -240,7 +273,12 @@ if st.session_state.midia_selecionada is not None and not df_completo.empty:
 
                             if st.form_submit_button("💾 Guardar Alterações"):
                                 url_nova_foto = row.get('imagem_path')
+                                # Se enviou uma nova foto, faz upload
                                 if e_foto is not None:
+                                    # Opcional: Se já existia uma foto, exclui a antiga do storage para não ocupar espaço inútil
+                                    if row.get('imagem_path'):
+                                        excluir_imagem(row['imagem_path'])
+                                        
                                     url_nova_foto = upload_imagem(e_foto)
                                     
                                 supabase.table("campanhas").update({
