@@ -351,3 +351,20 @@ with st.expander("➕ REGISTAR NOVO PONTO MANUALMENTE"):
                     "publicidade": f_publicidade, "imagem_path": url_foto_nova
                 }).execute()
                 st.rerun()
+
+# ==========================================
+# 6. RODAPÉ DE USUÁRIO E LOGOUT
+# ==========================================
+st.markdown("<hr style='margin-top: 60px; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+
+col_rodape1, col_rodape2, col_rodape3 = st.columns([5, 3, 2])
+
+with col_rodape1:
+    usuario_nome = st.session_state.get('usuario_atual', 'Usuário')
+    st.markdown(f"<div style='color: #64748b; font-size: 14px; margin-top: 15px;'>Logado como: <b style='color: #1e293b; font-size: 16px;'>👤 {usuario_nome.capitalize()}</b></div>", unsafe_allow_html=True)
+
+with col_rodape3:
+    if st.button("🚪 Sair do Sistema", use_container_width=True):
+        # Limpa a URL e recarrega a página para voltar à tela de bloqueio
+        st.query_params.clear()
+        st.rerun()
