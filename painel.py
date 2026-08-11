@@ -103,31 +103,31 @@ if 'sub_categoria' not in st.session_state:
 
 st.markdown("<h1 style='text-align: center; color: #1E293B; padding-top: 0px;'>🖥️ Sistema de Controle de Publicidade 360°</h1>", unsafe_allow_html=True)
 
-st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
-col_b1, col_b2, col_b3, col_b4, col_b5 = st.columns(5)
-with col_b1:
-    if st.button("📱 Todos", use_container_width=True): st.session_state.midia_selecionada = "Todos"; st.session_state.sub_categoria = "Todas as Categorias"
-with col_b2:
-    if st.button("🖼️ Outdoors", use_container_width=True): st.session_state.midia_selecionada = "OUTDOOR"; st.session_state.sub_categoria = "Todas as Categorias"
-with col_b3:
-    if st.button("🧱 Muros", use_container_width=True): st.session_state.midia_selecionada = "MURO"; st.session_state.sub_categoria = "Todas as Categorias"
-with col_b4:
-    if st.button("📺 Telas / TV", use_container_width=True): st.session_state.midia_selecionada = "TELAS"; st.session_state.sub_categoria = "Todas as Categorias"
-with col_b5:
-    if st.button("🚌 Busdoor", use_container_width=True): st.session_state.midia_selecionada = "BUSDOOR"; st.session_state.sub_categoria = "Todas as Categorias"
+st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
 
-st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
-col_b6, col_b7, col_b8, col_b9, col_b10 = st.columns(5)
-with col_b6:
-    if st.button("📢 Som", use_container_width=True): st.session_state.midia_selecionada = "SOM"; st.session_state.sub_categoria = "Todas as Categorias"
-with col_b7:
-    if st.button("🤝 Digital", use_container_width=True): st.session_state.midia_selecionada = "DIGITAL"; st.session_state.sub_categoria = "Todas as Categorias"
-with col_b8:
-    if st.button("🏋️ Locais", use_container_width=True): st.session_state.midia_selecionada = "ESTABELECIMENTO"; st.session_state.sub_categoria = "Todas as Categorias"
-with col_b9:
-    if st.button("🏢 Condomínios", use_container_width=True): st.session_state.midia_selecionada = "CONDOMINIO"; st.session_state.sub_categoria = "Todas as Categorias"
-with col_b10:
-    st.empty() 
+# Dicionário mapeando os nomes amigáveis para os filtros no banco de dados
+opcoes_midia = {
+    "📱 Mostrar Todos os Pontos": "Todos",
+    "🖼️ Outdoors": "OUTDOOR",
+    "🧱 Muros": "MURO",
+    "📺 Telas / TV": "TELAS",
+    "🚌 Busdoor": "BUSDOOR",
+    "📢 Som": "SOM",
+    "🤝 Digital": "DIGITAL",
+    "🏋️ Locais": "ESTABELECIMENTO",
+    "🏢 Condomínios": "CONDOMINIO"
+}
+
+# Componente nativo (Selectbox) que abre a roleta do Android/iOS de forma fluida
+escolha_midia = st.selectbox(
+    "🎯 Filtre por categoria de Mídia:",
+    options=list(opcoes_midia.keys()),
+    index=0
+)
+
+# A sessão é atualizada imediatamente quando o usuário escolhe na lista
+st.session_state.midia_selecionada = opcoes_midia[escolha_midia]
+st.session_state.sub_categoria = "Todas as Categorias" 
 
 # ==========================================
 # 4. ÁREA OCULTA E SUB-FILTROS
