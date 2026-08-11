@@ -2,7 +2,7 @@ import streamlit as st
 import time
 
 # 1. Configuração da página
-st.set_page_config(page_title="Login - Gestor de Mídia 360", layout="wide")
+st.set_page_config(page_title="Gestão de Mídia 360", layout="wide")
 
 # 2. Verifica se o usuário já está logado pela URL
 url_token = st.query_params.get("session", "")
