@@ -87,11 +87,13 @@ def carregar_dados():
     response = supabase.table("campanhas").select("*").execute()
     df = pd.DataFrame(response.data)
     
-    # O segredo: trocar os valores vazios (NaN) por uma string vazia ("")
+    # Limpando os valores vazios (NaN)
     if 'imagem_path' in df.columns:
         df['imagem_path'] = df['imagem_path'].fillna("")
         
     return df
+
+df_completo = carregar_dados()
 
 # ==========================================
 # 3. ESTADO DA INTERFACE E TÍTULO
