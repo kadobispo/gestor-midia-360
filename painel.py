@@ -85,9 +85,13 @@ def excluir_imagem(url_imagem):
 
 def carregar_dados():
     response = supabase.table("campanhas").select("*").execute()
-    return pd.DataFrame(response.data)
-
-df_completo = carregar_dados()
+    df = pd.DataFrame(response.data)
+    
+    # O segredo: trocar os valores vazios (NaN) por uma string vazia ("")
+    if 'imagem_path' in df.columns:
+        df['imagem_path'] = df['imagem_path'].fillna("")
+        
+    return df
 
 # ==========================================
 # 3. ESTADO DA INTERFACE E TÍTULO
