@@ -92,8 +92,8 @@ usuario_logado = st.session_state.get('usuario_atual', 'Usuário').capitalize()
 
 st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
-# Substituindo o Título em texto pela Logomarca
-col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+# Proporção ajustada para 20% do tamanho da tela (colunas 4-2-4)
+col_l1, col_l2, col_l3 = st.columns([4, 2, 4])
 with col_l2:
     st.markdown("<div class='logo-img'>", unsafe_allow_html=True)
     try:
