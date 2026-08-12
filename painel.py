@@ -33,6 +33,9 @@ st.markdown("""
     
     .historico-box { background-color: #f8fafc; border-left: 3px solid #cbd5e1; padding: 10px 15px; border-radius: 0 8px 8px 0; margin-bottom: 15px; font-size: 14px; color: #334155; white-space: pre-wrap;}
     
+    /* Arredondamento da logo principal */
+    .logo-img img { border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    
     @media print { .stButton, .btn-discreto, .stSelectbox, .stRadio, .stExpander { display: none !important; } }
     </style>
 """, unsafe_allow_html=True)
@@ -79,7 +82,7 @@ def carregar_dados():
 df_completo = carregar_dados()
 
 # ==========================================
-# ESTADO DA INTERFACE E TÍTULO
+# ESTADO DA INTERFACE E TÍTULO/LOGO
 # ==========================================
 if 'midia_selecionada' not in st.session_state:
     st.session_state.midia_selecionada = None
@@ -87,7 +90,19 @@ if 'sub_categoria' not in st.session_state:
     st.session_state.sub_categoria = "Todas as Categorias"
 usuario_logado = st.session_state.get('usuario_atual', 'Usuário').capitalize()
 
-st.markdown("<h1 style='text-align: center; color: #1E293B; padding-top: 0px;'>🖥️ Gestor 360</h1>", unsafe_allow_html=True)
+st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+# Substituindo o Título em texto pela Logomarca
+col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+with col_l2:
+    st.markdown("<div class='logo-img'>", unsafe_allow_html=True)
+    try:
+        st.image("IMG_2267.jpg", use_container_width=True)
+    except:
+        st.markdown("<h1 style='text-align: center; color: #1E293B;'>🖥️ Gestão de Mídia</h1>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
 aba_macro_midia, aba_macro_demandas = st.tabs(["📍 Controle de Mídias", "📋 Demandas do Marketing"])
 
@@ -313,7 +328,7 @@ with aba_macro_midia:
                 f_contato = st.text_input("Telefone")
                 f_publicidade = st.text_input("Detalhe da Publicidade")
             with col_f3:
-                f_vencimento = st.date_input("Vencimento", date.today())
+                f_vencimento = st.date_input("Vencimento", date.today(), format="DD/MM/YYYY")
                 f_status = st.selectbox("Status", ["Ativo", "Negociação", "ok"])
                 f_tipo_inv = st.radio("Pagamento", ["💰 Valor Financeiro", "🎁 Cortesia"])
                 if "Valor" in f_tipo_inv: f_valor = st.number_input("Investimento (R$)", min_value=0.0); tipo_salvar_novo = "Valor"
@@ -325,7 +340,7 @@ with aba_macro_midia:
                     data_upload_nova = date.today().strftime("%d/%m/%Y") if url_foto_nova else None
                     supabase.table("campanhas").insert({
                         "formato": f_formato, "parceiro_local": f_parceiro, "cidade": f_cidade, 
-                        "contato": f_contato, "responsavel": f_responsavel, "data_fim": str(f_vencimento), 
+                        "contato": f_contato, "responsavel": f_responsavel, "data_fim": f_vencimento.strftime("%d/%m/%Y"), 
                         "valor": f_valor, "tipo_investimento": tipo_salvar_novo, "status": f_status, 
                         "publicidade": f_publicidade, "imagem_path": url_foto_nova, "data_upload_foto": data_upload_nova
                     }).execute()
@@ -368,14 +383,14 @@ with aba_macro_demandas:
                     d_responsavel = st.text_input("Atribuir a (Responsável)")
                     d_prioridade = st.selectbox("Prioridade", ["🟢 Baixa", "🟡 Média", "🔴 Alta"], index=1)
                 with col_d3:
-                    d_prazo = st.date_input("Prazo Limite", date.today())
+                    d_prazo = st.date_input("Prazo Limite", date.today(), format="DD/MM/YYYY")
                     d_status = st.selectbox("Status Inicial", ["Fila", "Produção", "Resolvido"])
                 
                 if st.form_submit_button("Criar Demanda"):
                     if d_titulo:
                         dados_insercao = {
                             "titulo": d_titulo, "descricao": d_desc, 
-                            "status": d_status, "prazo": str(d_prazo), "resposta": "",
+                            "status": d_status, "prazo": d_prazo.strftime("%d/%m/%Y"), "resposta": "",
                             "arquivada": False
                         }
                         try: dados_insercao["prioridade"] = d_prioridade
@@ -385,7 +400,6 @@ with aba_macro_demandas:
                         try: dados_insercao["solicitante"] = d_solicitante
                         except: pass
                         
-                        # Se já nasceu Resolvido, salva a data de hoje
                         if d_status == "Resolvido":
                             fuso_br = timezone(timedelta(hours=-3))
                             dados_insercao["data_resolucao"] = datetime.now(fuso_br).strftime("%d/%m/%Y")
@@ -489,7 +503,6 @@ with aba_macro_demandas:
                         st.markdown(f"**Prioridade:** {prioridade} | **Responsável:** {resp}")
                         st.markdown(f"**Solicitante:** {solic}")
                         
-                        # Mostra a data real de resolução
                         data_res = task.get('data_resolucao', '')
                         if data_res:
                             st.markdown(f"<div style='color: #059669; font-size: 14px; font-weight: 600; margin-bottom: 5px;'>✅ Resolvido em: {data_res}</div>", unsafe_allow_html=True)
@@ -506,10 +519,8 @@ with aba_macro_demandas:
                                 adicionar_historico(task_id, task.get('resposta', ''), novo_coment)
                                 st.rerun()
                                 
-                        # Permite mover a demanda de volta para produção/fila se resolvido por engano
                         novo_status = st.selectbox("Mover para:", ["Fila", "Produção", "Resolvido"], index=2, key=f"k3_{task_id}")
                         if novo_status != 'Resolvido':
-                            # Se tirou de resolvido, apaga a data de resolução para ser marcada novamente no futuro
                             supabase.table("demandas").update({"status": novo_status, "data_resolucao": ""}).eq("id", task_id).execute()
                             st.rerun()
 
@@ -535,7 +546,6 @@ with aba_macro_demandas:
     with sub_aba_relatorio:
         st.markdown("<br>", unsafe_allow_html=True)
         if not df_ativas.empty:
-            # Prepara as colunas que vão para a planilha e para a tela
             colunas_export = ['titulo', 'descricao', 'solicitante', 'responsavel', 'prioridade', 'status', 'prazo']
             if 'data_resolucao' in df_ativas.columns:
                 colunas_export.append('data_resolucao')
