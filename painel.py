@@ -93,6 +93,101 @@ def carregar_dados():
 
 df_completo = carregar_dados()
 
+st.markdown("<h1 style='text-align: center; color: #1E293B; padding-top: 0px;'>🖥️ Gestor 360</h1>", unsafe_allow_html=True)
+
+# Cria as duas abas principais do sistema inteiro
+aba_macro_midia, aba_macro_demandas = st.tabs(["📍 Controle de Mídias", "📋 Demandas do Marketing"])
+
+# ==========================================
+# ABA 1: O SEU SISTEMA DE MÍDIAS ATUAL
+# ==========================================
+with aba_macro_midia:
+    # AQUI DENTRO FICA TODO O SEU CÓDIGO ATUAL DE BOTÕES, MAPAS E MÍDIAS
+    # Basta dar um "Tab" (recuo) em tudo que você já fez para ficar dentro deste bloco.
+    pass
+
+# ==========================================
+# ABA 2: O NOVO QUADRO DE DEMANDAS (ESTILO TRELLO)
+# ==========================================
+with aba_macro_demandas:
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 1. Busca os dados da tabela de demandas
+    try:
+        resp_demandas = supabase.table("demandas").select("*").execute()
+        df_demandas = pd.DataFrame(resp_demandas.data)
+    except:
+        df_demandas = pd.DataFrame()
+        st.warning("Crie a tabela 'demandas' no Supabase para ativar este módulo.")
+
+    # 2. Formulário Rápido de Nova Demanda
+    with st.expander("➕ Nova Demanda"):
+        with st.form("form_nova_demanda", clear_on_submit=True):
+            col_d1, col_d2 = st.columns([2, 1])
+            with col_d1:
+                d_titulo = st.text_input("Título da Demanda (Ex: Confecção Camisas Moto Taxi)")
+                d_desc = st.text_input("Detalhes / Escopo")
+            with col_d2:
+                d_prazo = st.date_input("Prazo Limite", date.today())
+                d_status = st.selectbox("Status Inicial", ["Fila", "Produção", "Resolvido"])
+            
+            if st.form_submit_button("Criar Demanda"):
+                if d_titulo:
+                    supabase.table("demandas").insert({
+                        "titulo": d_titulo, "descricao": d_desc, 
+                        "status": d_status, "prazo": str(d_prazo), "resposta": ""
+                    }).execute()
+                    st.rerun()
+
+    st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
+
+    # 3. O Quadro Kanban Visual (Três colunas)
+    if not df_demandas.empty:
+        col_kanban1, col_kanban2, col_kanban3 = st.columns(3)
+        
+        # Coluna 1: FILA
+        with col_kanban1:
+            st.markdown("<h4 style='text-align:center; color:#64748b;'>📥 Na Fila</h4>", unsafe_allow_html=True)
+            df_fila = df_demandas[df_demandas['status'] == 'Fila']
+            for _, task in df_fila.iterrows():
+                with st.expander(f"📌 {task.get('titulo', '')}"):
+                    st.caption(f"Prazo: {task.get('prazo', '')}")
+                    st.write(task.get('descricao', ''))
+                    
+                    novo_status = st.selectbox("Mover para:", ["Fila", "Produção", "Resolvido"], index=0, key=f"k1_{task['id']}")
+                    if novo_status != 'Fila':
+                        supabase.table("demandas").update({"status": novo_status}).eq("id", task['id']).execute()
+                        st.rerun()
+
+        # Coluna 2: PRODUÇÃO
+        with col_kanban2:
+            st.markdown("<h4 style='text-align:center; color:#eab308;'>⚙️ Em Produção (Arte/Confecção)</h4>", unsafe_allow_html=True)
+            df_prod = df_demandas[df_demandas['status'] == 'Produção']
+            for _, task in df_prod.iterrows():
+                with st.expander(f"🛠️ {task.get('titulo', '')}"):
+                    st.caption(f"Prazo: {task.get('prazo', '')}")
+                    
+                    # Campo de Resposta (Atualizações de andamento)
+                    with st.form(f"form_resp_{task['id']}"):
+                        nova_resposta = st.text_area("Atualização / Resposta:", value=str(task.get('resposta', '')))
+                        st.form_submit_button("💾 Salvar Resposta", on_click=lambda id=task['id'], resp=nova_resposta: supabase.table("demandas").update({"resposta": resp}).eq("id", id).execute())
+                    
+                    novo_status = st.selectbox("Mover para:", ["Fila", "Produção", "Resolvido"], index=1, key=f"k2_{task['id']}")
+                    if novo_status != 'Produção':
+                        supabase.table("demandas").update({"status": novo_status}).eq("id", task['id']).execute()
+                        st.rerun()
+
+        # Coluna 3: RESOLVIDO
+        with col_kanban3:
+            st.markdown("<h4 style='text-align:center; color:#22c55e;'>✅ Resolvido</h4>", unsafe_allow_html=True)
+            df_res = df_demandas[df_demandas['status'] == 'Resolvido']
+            for _, task in df_res.iterrows():
+                with st.expander(f"✔️ {task.get('titulo', '')}"):
+                    st.caption(f"Finalizado. Resposta Final: {task.get('resposta', 'Nenhuma')}")
+                    if st.button("🗑️ Arquivar/Deletar", key=f"del_{task['id']}"):
+                        supabase.table("demandas").delete().eq("id", task['id']).execute()
+                        st.rerun()
+
 # ==========================================
 # 3. ESTADO DA INTERFACE E TÍTULO
 # ==========================================
