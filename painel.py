@@ -3,7 +3,7 @@ import pandas as pd
 from supabase import create_client, Client
 import base64
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 # ==========================================
 # CONFIGURAÇÃO E ESTILIZAÇÃO
@@ -339,7 +339,8 @@ with aba_macro_demandas:
     st.markdown("<br>", unsafe_allow_html=True)
     try:
         resp_demandas = supabase.table("demandas").select("*").execute()
-        df_demandas = pd.DataFrame(resp_demandas.data)
+        # fillna("") é o segredo para transformar "nan" em campos vazios limpinhos
+        df_demandas = pd.DataFrame(resp_demandas.data).fillna("")
     except Exception:
         df_demandas = pd.DataFrame()
 
@@ -358,7 +359,6 @@ with aba_macro_demandas:
             
             if st.form_submit_button("Criar Demanda"):
                 if d_titulo:
-                    # Garantir que não quebre caso as novas colunas ainda não estejam no Supabase
                     dados_insercao = {
                         "titulo": d_titulo, "descricao": d_desc, 
                         "status": d_status, "prazo": str(d_prazo), "resposta": ""
@@ -373,10 +373,13 @@ with aba_macro_demandas:
 
     st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
     
-    # Função auxiliar para salvar atualizações no histórico
     def adicionar_historico(task_id, texto_atual, nova_msg):
         if not nova_msg.strip(): return
-        data_hora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+        
+        # O SEGREDINHO DA HORA CERTA: Pegando o fuso de Brasília (UTC-3)
+        fuso_br = timezone(timedelta(hours=-3))
+        data_hora = datetime.now(fuso_br).strftime("%d/%m/%Y às %H:%M")
+        
         novo_bloco = f"🔹 **[{data_hora}]**\n{nova_msg}"
         texto_final = f"{texto_atual}\n\n{novo_bloco}" if texto_atual else novo_bloco
         supabase.table("demandas").update({"resposta": texto_final}).eq("id", task_id).execute()
@@ -384,24 +387,22 @@ with aba_macro_demandas:
     if not df_demandas.empty and 'id' in df_demandas.columns:
         col_kanban1, col_kanban2, col_kanban3 = st.columns(3)
         
-        # --- COLUNA 1: FILA ---
         with col_kanban1:
             st.markdown("<h4 style='text-align:center; color:#64748b;'>📥 Na Fila</h4>", unsafe_allow_html=True)
             df_fila = df_demandas[df_demandas['status'] == 'Fila']
             for _, task in df_fila.iterrows():
                 task_id = task.get('id', str(_))
-                # Coleta dados extras
-                prioridade = task.get('prioridade', '🟡 Média') or '🟡 Média'
-                resp = task.get('responsavel', 'Não definido') or 'Não definido'
+                # Busca as informações e caso esteja vazio, insere o padrão
+                prioridade = task.get('prioridade') or '🟡 Média'
+                resp = task.get('responsavel') or 'Não definido'
                 
                 with st.expander(f"📌 {task.get('titulo', '')}"):
                     st.markdown(f"**Prioridade:** {prioridade} | **Responsável:** {resp}")
                     st.caption(f"🗓️ Prazo: {task.get('prazo', '')}")
                     if task.get('descricao', ''): st.info(task.get('descricao', ''))
                     
-                    # Exibir Histórico
                     hist = str(task.get('resposta', ''))
-                    if hist and hist != 'None':
+                    if hist:
                         st.markdown("**Histórico:**")
                         st.markdown(f"<div class='historico-box'>{hist}</div>", unsafe_allow_html=True)
                         
@@ -416,14 +417,13 @@ with aba_macro_demandas:
                         supabase.table("demandas").update({"status": novo_status}).eq("id", task_id).execute()
                         st.rerun()
 
-        # --- COLUNA 2: PRODUÇÃO ---
         with col_kanban2:
             st.markdown("<h4 style='text-align:center; color:#eab308;'>⚙️ Em Produção</h4>", unsafe_allow_html=True)
             df_prod = df_demandas[df_demandas['status'] == 'Produção']
             for _, task in df_prod.iterrows():
                 task_id = task.get('id', str(_))
-                prioridade = task.get('prioridade', '🟡 Média') or '🟡 Média'
-                resp = task.get('responsavel', 'Não definido') or 'Não definido'
+                prioridade = task.get('prioridade') or '🟡 Média'
+                resp = task.get('responsavel') or 'Não definido'
                 
                 with st.expander(f"🛠️ {task.get('titulo', '')}"):
                     st.markdown(f"**Prioridade:** {prioridade} | **Responsável:** {resp}")
@@ -431,7 +431,7 @@ with aba_macro_demandas:
                     if task.get('descricao', ''): st.info(task.get('descricao', ''))
                     
                     hist = str(task.get('resposta', ''))
-                    if hist and hist != 'None':
+                    if hist:
                         st.markdown("**Histórico:**")
                         st.markdown(f"<div class='historico-box'>{hist}</div>", unsafe_allow_html=True)
                         
@@ -446,21 +446,20 @@ with aba_macro_demandas:
                         supabase.table("demandas").update({"status": novo_status}).eq("id", task_id).execute()
                         st.rerun()
 
-        # --- COLUNA 3: RESOLVIDO ---
         with col_kanban3:
             st.markdown("<h4 style='text-align:center; color:#22c55e;'>✅ Resolvido</h4>", unsafe_allow_html=True)
             df_res = df_demandas[df_demandas['status'] == 'Resolvido']
             for _, task in df_res.iterrows():
                 task_id = task.get('id', str(_))
-                prioridade = task.get('prioridade', '🟡 Média') or '🟡 Média'
-                resp = task.get('responsavel', 'Não definido') or 'Não definido'
+                prioridade = task.get('prioridade') or '🟡 Média'
+                resp = task.get('responsavel') or 'Não definido'
                 
                 with st.expander(f"✔️ {task.get('titulo', '')}"):
                     st.markdown(f"**Prioridade:** {prioridade} | **Responsável:** {resp}")
                     st.caption(f"🗓️ Finalizado (Prazo original: {task.get('prazo', '')})")
                     
                     hist = str(task.get('resposta', ''))
-                    if hist and hist != 'None':
+                    if hist:
                         st.markdown("**Histórico Final:**")
                         st.markdown(f"<div class='historico-box'>{hist}</div>", unsafe_allow_html=True)
                         
