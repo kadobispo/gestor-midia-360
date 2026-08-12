@@ -3,7 +3,7 @@ import pandas as pd
 from supabase import create_client, Client
 import base64
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 # ==========================================
 # CONFIGURAÇÃO E ESTILIZAÇÃO
@@ -30,6 +30,10 @@ st.markdown("""
     .btn-discreto { text-decoration: none; font-size: 20px; color: #94a3b8; background: #f1f5f9; padding: 6px 12px; border-radius: 8px; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; }
     .btn-discreto:hover { background: #ffffff; color: #4f46e5; border-color: #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1); transform: scale(1.05); }
     .btn-pequeno > div > div > button { height: 40px !important; font-size: 14px !important; }
+    
+    /* Estilo para a caixa de histórico do Kanban */
+    .historico-box { background-color: #f8fafc; border-left: 3px solid #cbd5e1; padding: 10px 15px; border-radius: 0 8px 8px 0; margin-bottom: 15px; font-size: 14px; color: #334155; white-space: pre-wrap;}
+    
     @media print { .stButton, .btn-discreto, .stSelectbox, .stRadio, .stExpander { display: none !important; } }
     </style>
 """, unsafe_allow_html=True)
@@ -89,7 +93,7 @@ st.markdown("<h1 style='text-align: center; color: #1E293B; padding-top: 0px;'>�
 aba_macro_midia, aba_macro_demandas = st.tabs(["📍 Controle de Mídias", "📋 Demandas do Marketing"])
 
 # ==========================================
-# ABA 1: CONTROLE DE MÍDIAS (O SEU SISTEMA ORIGINAL)
+# ABA 1: CONTROLE DE MÍDIAS (SEU SISTEMA ORIGINAL)
 # ==========================================
 with aba_macro_midia:
     st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
@@ -181,7 +185,7 @@ with aba_macro_midia:
             
             if not df_final.empty:
                 for index, row in df_final.iterrows():
-                    row_id = row.get('id', str(index)) # Prevenção de erro segura
+                    row_id = row.get('id', str(index))
                     icone_status = "🟢" if row.get('status') in ["Ativo", "ok"] else ("🟡" if row.get('status') == "Negociação" else "🔴")
                     titulo_linha = f"{icone_status} {row.get('parceiro_local', '')} | 📍 {row.get('cidade', '')} | 🔹 {row.get('formato', '')}"
                     
@@ -341,63 +345,133 @@ with aba_macro_demandas:
 
     with st.expander("➕ Nova Demanda"):
         with st.form("form_nova_demanda", clear_on_submit=True):
-            col_d1, col_d2 = st.columns([2, 1])
+            col_d1, col_d2, col_d3 = st.columns([2, 1, 1])
             with col_d1:
                 d_titulo = st.text_input("Título da Demanda")
                 d_desc = st.text_input("Detalhes / Escopo")
             with col_d2:
+                d_responsavel = st.text_input("Atribuir a (Responsável)")
+                d_prioridade = st.selectbox("Prioridade", ["🟢 Baixa", "🟡 Média", "🔴 Alta"], index=1)
+            with col_d3:
                 d_prazo = st.date_input("Prazo Limite", date.today())
                 d_status = st.selectbox("Status Inicial", ["Fila", "Produção", "Resolvido"])
             
             if st.form_submit_button("Criar Demanda"):
                 if d_titulo:
-                    supabase.table("demandas").insert({
+                    # Garantir que não quebre caso as novas colunas ainda não estejam no Supabase
+                    dados_insercao = {
                         "titulo": d_titulo, "descricao": d_desc, 
                         "status": d_status, "prazo": str(d_prazo), "resposta": ""
-                    }).execute()
+                    }
+                    try: dados_insercao["prioridade"] = d_prioridade
+                    except: pass
+                    try: dados_insercao["responsavel"] = d_responsavel
+                    except: pass
+
+                    supabase.table("demandas").insert(dados_insercao).execute()
                     st.rerun()
 
     st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
+    
+    # Função auxiliar para salvar atualizações no histórico
+    def adicionar_historico(task_id, texto_atual, nova_msg):
+        if not nova_msg.strip(): return
+        data_hora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+        novo_bloco = f"🔹 **[{data_hora}]**\n{nova_msg}"
+        texto_final = f"{texto_atual}\n\n{novo_bloco}" if texto_atual else novo_bloco
+        supabase.table("demandas").update({"resposta": texto_final}).eq("id", task_id).execute()
 
     if not df_demandas.empty and 'id' in df_demandas.columns:
         col_kanban1, col_kanban2, col_kanban3 = st.columns(3)
         
+        # --- COLUNA 1: FILA ---
         with col_kanban1:
             st.markdown("<h4 style='text-align:center; color:#64748b;'>📥 Na Fila</h4>", unsafe_allow_html=True)
             df_fila = df_demandas[df_demandas['status'] == 'Fila']
             for _, task in df_fila.iterrows():
                 task_id = task.get('id', str(_))
+                # Coleta dados extras
+                prioridade = task.get('prioridade', '🟡 Média') or '🟡 Média'
+                resp = task.get('responsavel', 'Não definido') or 'Não definido'
+                
                 with st.expander(f"📌 {task.get('titulo', '')}"):
-                    st.caption(f"Prazo: {task.get('prazo', '')}")
-                    st.write(task.get('descricao', ''))
+                    st.markdown(f"**Prioridade:** {prioridade} | **Responsável:** {resp}")
+                    st.caption(f"🗓️ Prazo: {task.get('prazo', '')}")
+                    if task.get('descricao', ''): st.info(task.get('descricao', ''))
+                    
+                    # Exibir Histórico
+                    hist = str(task.get('resposta', ''))
+                    if hist and hist != 'None':
+                        st.markdown("**Histórico:**")
+                        st.markdown(f"<div class='historico-box'>{hist}</div>", unsafe_allow_html=True)
+                        
+                    with st.form(f"form_f_{task_id}", clear_on_submit=True):
+                        novo_coment = st.text_area("Adicionar Atualização:")
+                        if st.form_submit_button("Salvar Nota"):
+                            adicionar_historico(task_id, task.get('resposta', ''), novo_coment)
+                            st.rerun()
+
                     novo_status = st.selectbox("Mover para:", ["Fila", "Produção", "Resolvido"], index=0, key=f"k1_{task_id}")
                     if novo_status != 'Fila':
                         supabase.table("demandas").update({"status": novo_status}).eq("id", task_id).execute()
                         st.rerun()
 
+        # --- COLUNA 2: PRODUÇÃO ---
         with col_kanban2:
             st.markdown("<h4 style='text-align:center; color:#eab308;'>⚙️ Em Produção</h4>", unsafe_allow_html=True)
             df_prod = df_demandas[df_demandas['status'] == 'Produção']
             for _, task in df_prod.iterrows():
                 task_id = task.get('id', str(_))
+                prioridade = task.get('prioridade', '🟡 Média') or '🟡 Média'
+                resp = task.get('responsavel', 'Não definido') or 'Não definido'
+                
                 with st.expander(f"🛠️ {task.get('titulo', '')}"):
-                    st.caption(f"Prazo: {task.get('prazo', '')}")
-                    with st.form(f"form_resp_{task_id}"):
-                        nova_resposta = st.text_area("Atualização / Resposta:", value=str(task.get('resposta', '')))
-                        st.form_submit_button("💾 Salvar Resposta", on_click=lambda id=task_id, resp=nova_resposta: supabase.table("demandas").update({"resposta": resp}).eq("id", id).execute())
+                    st.markdown(f"**Prioridade:** {prioridade} | **Responsável:** {resp}")
+                    st.caption(f"🗓️ Prazo: {task.get('prazo', '')}")
+                    if task.get('descricao', ''): st.info(task.get('descricao', ''))
+                    
+                    hist = str(task.get('resposta', ''))
+                    if hist and hist != 'None':
+                        st.markdown("**Histórico:**")
+                        st.markdown(f"<div class='historico-box'>{hist}</div>", unsafe_allow_html=True)
+                        
+                    with st.form(f"form_p_{task_id}", clear_on_submit=True):
+                        novo_coment = st.text_area("Adicionar Atualização:")
+                        if st.form_submit_button("Salvar Nota"):
+                            adicionar_historico(task_id, task.get('resposta', ''), novo_coment)
+                            st.rerun()
+                            
                     novo_status = st.selectbox("Mover para:", ["Fila", "Produção", "Resolvido"], index=1, key=f"k2_{task_id}")
                     if novo_status != 'Produção':
                         supabase.table("demandas").update({"status": novo_status}).eq("id", task_id).execute()
                         st.rerun()
 
+        # --- COLUNA 3: RESOLVIDO ---
         with col_kanban3:
             st.markdown("<h4 style='text-align:center; color:#22c55e;'>✅ Resolvido</h4>", unsafe_allow_html=True)
             df_res = df_demandas[df_demandas['status'] == 'Resolvido']
             for _, task in df_res.iterrows():
                 task_id = task.get('id', str(_))
+                prioridade = task.get('prioridade', '🟡 Média') or '🟡 Média'
+                resp = task.get('responsavel', 'Não definido') or 'Não definido'
+                
                 with st.expander(f"✔️ {task.get('titulo', '')}"):
-                    st.caption(f"Finalizado. Resposta Final: {task.get('resposta', 'Nenhuma')}")
-                    if st.button("🗑️ Arquivar/Deletar", key=f"del_{task_id}"):
+                    st.markdown(f"**Prioridade:** {prioridade} | **Responsável:** {resp}")
+                    st.caption(f"🗓️ Finalizado (Prazo original: {task.get('prazo', '')})")
+                    
+                    hist = str(task.get('resposta', ''))
+                    if hist and hist != 'None':
+                        st.markdown("**Histórico Final:**")
+                        st.markdown(f"<div class='historico-box'>{hist}</div>", unsafe_allow_html=True)
+                        
+                    with st.form(f"form_r_{task_id}", clear_on_submit=True):
+                        novo_coment = st.text_area("Adicionar Nota Final:")
+                        if st.form_submit_button("Salvar Nota"):
+                            adicionar_historico(task_id, task.get('resposta', ''), novo_coment)
+                            st.rerun()
+
+                    st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+                    if st.button("🗑️ Arquivar/Deletar Demanda", key=f"del_{task_id}"):
                         supabase.table("demandas").delete().eq("id", task_id).execute()
                         st.rerun()
     elif not df_demandas.empty:
