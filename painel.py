@@ -4,6 +4,7 @@ from supabase import create_client, Client
 import base64
 import uuid
 from datetime import date, datetime, timedelta, timezone
+import requests
 
 # ==========================================
 # CONFIGURAÇÃO E ESTILIZAÇÃO
@@ -30,15 +31,24 @@ st.markdown("""
     .btn-discreto { text-decoration: none; font-size: 20px; color: #94a3b8; background: #f1f5f9; padding: 6px 12px; border-radius: 8px; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; }
     .btn-discreto:hover { background: #ffffff; color: #4f46e5; border-color: #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1); transform: scale(1.05); }
     .btn-pequeno > div > div > button { height: 40px !important; font-size: 14px !important; }
-    
     .historico-box { background-color: #f8fafc; border-left: 3px solid #cbd5e1; padding: 10px 15px; border-radius: 0 8px 8px 0; margin-bottom: 15px; font-size: 14px; color: #334155; white-space: pre-wrap;}
-    
-    /* Arredondamento da logo principal */
     .logo-img img { border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-    
     @media print { .stButton, .btn-discreto, .stSelectbox, .stRadio, .stExpander { display: none !important; } }
     </style>
 """, unsafe_allow_html=True)
+
+# ==========================================
+# FUNÇÃO DE NOTIFICAÇÃO TELEGRAM
+# ==========================================
+def enviar_alerta_telegram(titulo, solicitante, prioridade, prazo):
+    try:
+        token = st.secrets["TELEGRAM_TOKEN"]
+        chat_id = st.secrets["TELEGRAM_CHAT_ID"]
+        mensagem = f"🚨 *Nova Demanda Cadastrada!*\n\n📌 *Título:* {titulo}\n👤 *Solicitante:* {solicitante}\n⚠️ *Prioridade:* {prioridade}\n🗓️ *Prazo:* {prazo}"
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {"chat_id": chat_id, "text": mensagem, "parse_mode": "Markdown"}
+        requests.post(url, json=payload)
+    except Exception as e: pass
 
 # ==========================================
 # CONEXÃO COM O SUPABASE
@@ -69,8 +79,7 @@ def excluir_imagem(url_imagem):
         nome_arquivo = url_imagem.split('/')[-1]
         supabase.storage.from_("fotos_midia").remove([nome_arquivo])
         return True
-    except Exception:
-        return False
+    except Exception: return False
 
 def carregar_dados():
     response = supabase.table("campanhas").select("*").execute()
@@ -84,26 +93,19 @@ df_completo = carregar_dados()
 # ==========================================
 # ESTADO DA INTERFACE E TÍTULO/LOGO
 # ==========================================
-if 'midia_selecionada' not in st.session_state:
-    st.session_state.midia_selecionada = None
-if 'sub_categoria' not in st.session_state:
-    st.session_state.sub_categoria = "Todas as Categorias"
+if 'midia_selecionada' not in st.session_state: st.session_state.midia_selecionada = None
+if 'sub_categoria' not in st.session_state: st.session_state.sub_categoria = "Todas as Categorias"
 usuario_logado = st.session_state.get('usuario_atual', 'Usuário').capitalize()
 
 st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-
-# Proporção ajustada para 20% do tamanho da tela (colunas 4-2-4)
 col_l1, col_l2, col_l3 = st.columns([4, 2, 4])
 with col_l2:
     st.markdown("<div class='logo-img'>", unsafe_allow_html=True)
-    try:
-        st.image("IMG_2267.jpg", use_container_width=True)
-    except:
-        st.markdown("<h1 style='text-align: center; color: #1E293B;'>🖥️ Gestão de Mídia</h1>", unsafe_allow_html=True)
+    try: st.image("IMG_2267.jpg", use_container_width=True)
+    except: st.markdown("<h1 style='text-align: center; color: #1E293B;'>🖥️ Gestão de Mídia</h1>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-
 aba_macro_midia, aba_macro_demandas = st.tabs(["📍 Controle de Mídias", "📋 Demandas do Marketing"])
 
 # ==========================================
@@ -133,28 +135,19 @@ with aba_macro_midia:
         if st.button("🏋️ Locais", use_container_width=True): st.session_state.midia_selecionada = "ESTABELECIMENTO"; st.session_state.sub_categoria = "Todas as Categorias"
     with col_b9:
         if st.button("🏢 Condomínios", use_container_width=True): st.session_state.midia_selecionada = "CONDOMINIO"; st.session_state.sub_categoria = "Todas as Categorias"
-    with col_b10:
-        st.empty() 
+    with col_b10: st.empty() 
 
     if st.session_state.midia_selecionada is not None and not df_completo.empty:
         df_categoria = df_completo.copy()
 
-        if st.session_state.midia_selecionada == "OUTDOOR":
-            df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('OUTDOOR|TRIEDO|TREINO|PLACA', na=False)]
-        elif st.session_state.midia_selecionada == "TELAS":
-            df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('TELÃO|LED|TV|INDOOR', na=False)]
-        elif st.session_state.midia_selecionada == "MURO":
-            df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('MURO', na=False)]
-        elif st.session_state.midia_selecionada == "BUSDOOR":
-            df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('BUSDOOR|ÔNIBUS', na=False)]
-        elif st.session_state.midia_selecionada == "SOM":
-            df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('SOM|RÁDIO|RADIO|COMERCIO', na=False)]
-        elif st.session_state.midia_selecionada == "DIGITAL":
-            df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('INFLUENCER|SITE|INSTAGRAN|PÁGINA|CORREDOR|CANTOR', na=False)]
-        elif st.session_state.midia_selecionada == "ESTABELECIMENTO":
-            df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('ACADEMIA|BAR|BALNEARIO|CHURACARIA|RESTAURANTE|SORVETERIA|FUTEBOL|LANCHONETE|IGREJA', na=False)]
-        elif st.session_state.midia_selecionada == "CONDOMINIO":
-            df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('CONDOMINIO|CONDOMÍNIO|RESIDENCIAL', na=False)]
+        if st.session_state.midia_selecionada == "OUTDOOR": df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('OUTDOOR|TRIEDO|TREINO|PLACA', na=False)]
+        elif st.session_state.midia_selecionada == "TELAS": df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('TELÃO|LED|TV|INDOOR', na=False)]
+        elif st.session_state.midia_selecionada == "MURO": df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('MURO', na=False)]
+        elif st.session_state.midia_selecionada == "BUSDOOR": df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('BUSDOOR|ÔNIBUS', na=False)]
+        elif st.session_state.midia_selecionada == "SOM": df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('SOM|RÁDIO|RADIO|COMERCIO', na=False)]
+        elif st.session_state.midia_selecionada == "DIGITAL": df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('INFLUENCER|SITE|INSTAGRAN|PÁGINA|CORREDOR|CANTOR', na=False)]
+        elif st.session_state.midia_selecionada == "ESTABELECIMENTO": df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('ACADEMIA|BAR|BALNEARIO|CHURACARIA|RESTAURANTE|SORVETERIA|FUTEBOL|LANCHONETE|IGREJA', na=False)]
+        elif st.session_state.midia_selecionada == "CONDOMINIO": df_categoria = df_categoria[df_categoria['formato'].str.upper().str.contains('CONDOMINIO|CONDOMÍNIO|RESIDENCIAL', na=False)]
 
         st.markdown("<hr style='margin: 15px 0px 10px 0px; border: none; border-top: 1px solid #cbd5e1;'>", unsafe_allow_html=True)
         st.markdown(f"<div style='font-size: 15px; font-weight: bold; color: #475569; margin-bottom: 5px;'>🔎 Busca em: {st.session_state.midia_selecionada}</div>", unsafe_allow_html=True)
@@ -171,13 +164,11 @@ with aba_macro_midia:
             filtro_cidade_selecionado = st.selectbox("📍 Filtrar resultados por cidade:", cidades_disponiveis, key="filtro_cidade")
 
         df_final = df_categoria.copy()
-        if filtro_categoria_selecionado != "Todas as Categorias":
-            df_final = df_final[df_final['formato'] == filtro_categoria_selecionado]
-        if filtro_cidade_selecionado != "Todas as Cidades":
-            df_final = df_final[df_final['cidade'] == filtro_cidade_selecionado]
+        if filtro_categoria_selecionado != "Todas as Categorias": df_final = df_final[df_final['formato'] == filtro_categoria_selecionado]
+        if filtro_cidade_selecionado != "Todas as Cidades": df_final = df_final[df_final['cidade'] == filtro_cidade_selecionado]
 
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        aba_lista, aba_dashboard = st.tabs(["📑 Gerenciamento (Lista)", "📊 Dashboard"])
+        aba_lista, aba_dashboard = st.tabs(["📑 Gerenciamento (Lista)", "📊 Dashboard Mídias"])
 
         with aba_lista:
             link_download = ""
@@ -209,26 +200,20 @@ with aba_macro_midia:
                             st.markdown("**👤 Dados do Contato**")
                             st.write(f"**Responsável:** {row.get('responsavel', '')}")
                             st.write(f"**Telefone:** {row.get('contato', '')}")
-                            
                         with c2:
                             st.markdown("**📅 Prazos e Valores**")
                             st.write(f"**Renovação:** {row.get('data_fim', 'Não definido')}")
-                            if row.get('tipo_investimento') == 'Cortesia':
-                                st.write("**Investimento:** 🎁 Cortesia / Permuta")
-                            else:
-                                st.write(f"**Investimento:** 💰 R$ {float(row.get('valor', 0)):,.2f}")
-                                
+                            if row.get('tipo_investimento') == 'Cortesia': st.write("**Investimento:** 🎁 Cortesia / Permuta")
+                            else: st.write(f"**Investimento:** 💰 R$ {float(row.get('valor', 0)):,.2f}")
                         with c3:
                             st.markdown("**⚙️ Gestão Rápida**")
                             status_atual = row.get('status', 'Ativo')
                             opcoes_status = ["Ativo", "Negociação", "Pausado", "Cancelado", "ok"]
                             idx_status = opcoes_status.index(status_atual) if status_atual in opcoes_status else 0
                             novo_status = st.selectbox("Alterar Status:", opcoes_status, index=idx_status, key=f"status_{row_id}")
-                            
                             if novo_status != status_atual:
                                 supabase.table("campanhas").update({"status": novo_status}).eq("id", row_id).execute()
                                 st.rerun()
-                                
                             st.write("")
                             if st.button("🗑️ Deletar Ponto", key=f"del_{row_id}", type="primary"):
                                 supabase.table("campanhas").delete().eq("id", row_id).execute()
@@ -237,22 +222,41 @@ with aba_macro_midia:
 
                         st.info(f"**📣 Detalhe da Publicidade:** {row.get('publicidade', 'Não especificado')}")
 
-                        if row.get('imagem_path'):
+                        # DIVISÃO LADO A LADO: FOTO E MAPA
+                        st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+                        col_foto, col_mapa = st.columns(2)
+                        
+                        with col_foto:
                             st.markdown("**📸 Foto do Ponto**")
-                            if row.get('data_upload_foto'):
-                                st.markdown(f"<div style='font-size: 13px; color: #64748b; margin-bottom: 5px;'>🗓️ Enviada em: {row['data_upload_foto']}</div>", unsafe_allow_html=True)
-                            st.image(row['imagem_path'], use_container_width=True)
+                            if row.get('imagem_path'):
+                                if row.get('data_upload_foto'):
+                                    st.markdown(f"<div style='font-size: 13px; color: #64748b; margin-bottom: 5px;'>🗓️ Enviada em: {row['data_upload_foto']}</div>", unsafe_allow_html=True)
+                                st.image(row['imagem_path'], use_container_width=True)
+                                st.markdown("<div class='btn-pequeno'>", unsafe_allow_html=True)
+                                if st.button("❌ Remover Foto", key=f"rm_foto_{row_id}"):
+                                    if excluir_imagem(row['imagem_path']):
+                                        supabase.table("campanhas").update({"imagem_path": None, "data_upload_foto": None}).eq("id", row_id).execute()
+                                        st.rerun()
+                                st.markdown("</div>", unsafe_allow_html=True)
+                            else:
+                                st.info("Nenhuma foto cadastrada.")
+
+                        with col_mapa:
+                            st.markdown("**📍 Localização no Mapa**")
+                            lat = row.get('latitude')
+                            lon = row.get('longitude')
                             
-                            st.markdown("<div class='btn-pequeno'>", unsafe_allow_html=True)
-                            if st.button("❌ Remover Foto", key=f"rm_foto_{row_id}"):
-                                excluido = excluir_imagem(row['imagem_path'])
-                                if excluido:
-                                    supabase.table("campanhas").update({"imagem_path": None, "data_upload_foto": None}).eq("id", row_id).execute()
-                                    st.rerun()
-                            st.markdown("</div>", unsafe_allow_html=True)
+                            if lat and lon and str(lat).strip() != "" and str(lon).strip() != "":
+                                try:
+                                    df_pino = pd.DataFrame({'lat': [float(lat)], 'lon': [float(lon)]})
+                                    st.map(df_pino, zoom=14, use_container_width=True)
+                                except:
+                                    st.warning("⚠️ Coordenadas inválidas. Certifique-se de que estão no formato correto (ex: -10.947, -37.073).")
+                            else:
+                                st.info("🗺️ Sem localização exata. Edite este ponto para adicionar Latitude e Longitude.")
 
                         st.markdown("---")
-                        with st.expander("✏️ Editar Dados e Anexar Foto"):
+                        with st.expander("✏️ Editar Dados, Mapa e Anexar Foto"):
                             with st.form(f"form_edit_{row_id}"):
                                 ec1, ec2, ec3 = st.columns(3)
                                 with ec1:
@@ -264,6 +268,8 @@ with aba_macro_midia:
                                     e_responsavel = st.text_input("Responsável", value=str(row.get('responsavel', '')))
                                     e_contato = st.text_input("Telefone", value=str(row.get('contato', '')))
                                     e_publicidade = st.text_input("Detalhe da Publicidade", value=str(row.get('publicidade', '')))
+                                    # Novos campos de mapa na edição
+                                    e_lat = st.text_input("Latitude (Ex: -10.9472)", value=str(row.get('latitude', '')))
                                 with ec3:
                                     e_data = st.text_input("Vencimento/Renovação", value=str(row.get('data_fim', '')))
                                     e_tipo_inv = st.radio("Pagamento", ["💰 Valor Financeiro", "🎁 Cortesia"], index=0 if row.get('tipo_investimento') == 'Valor' else 1, key=f"radio_edit_{row_id}")
@@ -275,6 +281,8 @@ with aba_macro_midia:
                                     else:
                                         e_valor = 0.0
                                         tipo_salvar = "Cortesia"
+                                    # Novos campos de mapa na edição
+                                    e_lon = st.text_input("Longitude (Ex: -37.0731)", value=str(row.get('longitude', '')))
 
                                 if st.form_submit_button("💾 Guardar Alterações"):
                                     url_nova_foto = row.get('imagem_path')
@@ -284,12 +292,20 @@ with aba_macro_midia:
                                         url_nova_foto = upload_imagem(e_foto)
                                         data_upload = date.today().strftime("%d/%m/%Y")
                                         
-                                    supabase.table("campanhas").update({
+                                    dados_atualizar = {
                                         "formato": e_formato, "parceiro_local": e_parceiro, "cidade": e_cidade,
                                         "responsavel": e_responsavel, "contato": e_contato, "valor": e_valor,
                                         "tipo_investimento": tipo_salvar, "data_fim": e_data, "publicidade": e_publicidade,
                                         "imagem_path": url_nova_foto, "data_upload_foto": data_upload
-                                    }).eq("id", row_id).execute()
+                                    }
+                                    
+                                    # Tenta salvar as coordenadas com segurança, ignorando se não existirem no banco ainda
+                                    try: dados_atualizar['latitude'] = e_lat
+                                    except: pass
+                                    try: dados_atualizar['longitude'] = e_lon
+                                    except: pass
+
+                                    supabase.table("campanhas").update(dados_atualizar).eq("id", row_id).execute()
                                     st.rerun()
 
         with aba_dashboard:
@@ -304,7 +320,27 @@ with aba_macro_midia:
                 metrica3.metric("🎁 Permutas/Cortesias", len(df_final[df_final['tipo_investimento'] == 'Cortesia']))
                 metrica4.metric("🟢 Pontos Ativos", len(df_final[df_final['status'].isin(['Ativo', 'ok'])]))
                 
-                st.markdown("<hr style='margin: 30px 0px; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+                # MAPA GLOBAL DO DASHBOARD
+                st.markdown("<hr style='margin: 30px 0px 10px 0px; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+                st.markdown("### 🗺️ Mapa Global de Operações")
+                st.caption("Visão geral de todos os pontos georreferenciados na sua busca atual.")
+                
+                # Prepara os dados para o mapa global
+                if 'latitude' in df_final.columns and 'longitude' in df_final.columns:
+                    df_mapa_global = df_final[['parceiro_local', 'latitude', 'longitude']].copy()
+                    df_mapa_global['lat'] = pd.to_numeric(df_mapa_global['latitude'], errors='coerce')
+                    df_mapa_global['lon'] = pd.to_numeric(df_mapa_global['longitude'], errors='coerce')
+                    df_mapa_global = df_mapa_global.dropna(subset=['lat', 'lon'])
+                    
+                    if not df_mapa_global.empty:
+                        st.map(df_mapa_global, use_container_width=True)
+                    else:
+                        st.info("Nenhum ponto com coordenadas cadastradas encontrado para exibir no mapa global.")
+                else:
+                    st.info("Adicione os campos de latitude e longitude no Supabase para ativar o Mapa Global.")
+
+                st.markdown("<hr style='margin: 10px 0px 30px 0px; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+                
                 col_graf1, col_graf2, col_graf3 = st.columns(3)
                 with col_graf1: st.markdown("**Por Cidade**"); st.bar_chart(df_final['cidade'].value_counts())
                 with col_graf2: st.markdown("**Por Categoria**"); st.bar_chart(df_final['formato'].value_counts())
@@ -327,23 +363,32 @@ with aba_macro_midia:
                 f_responsavel = st.text_input("Responsável")
                 f_contato = st.text_input("Telefone")
                 f_publicidade = st.text_input("Detalhe da Publicidade")
+                f_lat = st.text_input("📍 Latitude (Google Maps)")
             with col_f3:
                 f_vencimento = st.date_input("Vencimento", date.today(), format="DD/MM/YYYY")
                 f_status = st.selectbox("Status", ["Ativo", "Negociação", "ok"])
                 f_tipo_inv = st.radio("Pagamento", ["💰 Valor Financeiro", "🎁 Cortesia"])
                 if "Valor" in f_tipo_inv: f_valor = st.number_input("Investimento (R$)", min_value=0.0); tipo_salvar_novo = "Valor"
                 else: f_valor = 0.0; tipo_salvar_novo = "Cortesia"
+                f_lon = st.text_input("📍 Longitude (Google Maps)")
                 
             if st.form_submit_button("Guardar Novo Registo"):
                 if f_formato and f_parceiro:
                     url_foto_nova = upload_imagem(f_foto)
                     data_upload_nova = date.today().strftime("%d/%m/%Y") if url_foto_nova else None
-                    supabase.table("campanhas").insert({
+                    
+                    dados_novos = {
                         "formato": f_formato, "parceiro_local": f_parceiro, "cidade": f_cidade, 
                         "contato": f_contato, "responsavel": f_responsavel, "data_fim": f_vencimento.strftime("%d/%m/%Y"), 
                         "valor": f_valor, "tipo_investimento": tipo_salvar_novo, "status": f_status, 
                         "publicidade": f_publicidade, "imagem_path": url_foto_nova, "data_upload_foto": data_upload_nova
-                    }).execute()
+                    }
+                    try: dados_novos['latitude'] = f_lat
+                    except: pass
+                    try: dados_novos['longitude'] = f_lon
+                    except: pass
+
+                    supabase.table("campanhas").insert(dados_novos).execute()
                     st.rerun()
 
 # ==========================================
@@ -405,6 +450,7 @@ with aba_macro_demandas:
                             dados_insercao["data_resolucao"] = datetime.now(fuso_br).strftime("%d/%m/%Y")
 
                         supabase.table("demandas").insert(dados_insercao).execute()
+                        enviar_alerta_telegram(d_titulo, d_solicitante, d_prioridade, d_prazo.strftime("%d/%m/%Y"))
                         st.rerun()
 
         st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
