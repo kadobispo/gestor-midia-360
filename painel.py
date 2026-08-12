@@ -340,13 +340,12 @@ with aba_macro_demandas:
         resp_demandas = supabase.table("demandas").select("*").execute()
         df_demandas = pd.DataFrame(resp_demandas.data).fillna("")
         
-        # Tratamento seguro para colunas novas (evita quebrar se o banco ainda não tiver atualizado)
         if 'arquivada' not in df_demandas.columns: df_demandas['arquivada'] = False
         else: df_demandas['arquivada'] = df_demandas['arquivada'].replace("", False).astype(bool)
         
         if 'solicitante' not in df_demandas.columns: df_demandas['solicitante'] = ""
+        if 'data_resolucao' not in df_demandas.columns: df_demandas['data_resolucao'] = ""
         
-        # Separa as demandas ativas das arquivadas
         df_ativas = df_demandas[df_demandas['arquivada'] == False]
         df_arquivadas = df_demandas[df_demandas['arquivada'] == True]
         
@@ -385,6 +384,11 @@ with aba_macro_demandas:
                         except: pass
                         try: dados_insercao["solicitante"] = d_solicitante
                         except: pass
+                        
+                        # Se já nasceu Resolvido, salva a data de hoje
+                        if d_status == "Resolvido":
+                            fuso_br = timezone(timedelta(hours=-3))
+                            dados_insercao["data_resolucao"] = datetime.now(fuso_br).strftime("%d/%m/%Y")
 
                         supabase.table("demandas").insert(dados_insercao).execute()
                         st.rerun()
@@ -430,7 +434,11 @@ with aba_macro_demandas:
 
                         novo_status = st.selectbox("Mover para:", ["Fila", "Produção", "Resolvido"], index=0, key=f"k1_{task_id}")
                         if novo_status != 'Fila':
-                            supabase.table("demandas").update({"status": novo_status}).eq("id", task_id).execute()
+                            dados_update = {"status": novo_status}
+                            if novo_status == 'Resolvido':
+                                fuso_br = timezone(timedelta(hours=-3))
+                                dados_update["data_resolucao"] = datetime.now(fuso_br).strftime("%d/%m/%Y")
+                            supabase.table("demandas").update(dados_update).eq("id", task_id).execute()
                             st.rerun()
 
             with col_kanban2:
@@ -461,7 +469,11 @@ with aba_macro_demandas:
                                 
                         novo_status = st.selectbox("Mover para:", ["Fila", "Produção", "Resolvido"], index=1, key=f"k2_{task_id}")
                         if novo_status != 'Produção':
-                            supabase.table("demandas").update({"status": novo_status}).eq("id", task_id).execute()
+                            dados_update = {"status": novo_status}
+                            if novo_status == 'Resolvido':
+                                fuso_br = timezone(timedelta(hours=-3))
+                                dados_update["data_resolucao"] = datetime.now(fuso_br).strftime("%d/%m/%Y")
+                            supabase.table("demandas").update(dados_update).eq("id", task_id).execute()
                             st.rerun()
 
             with col_kanban3:
@@ -476,7 +488,12 @@ with aba_macro_demandas:
                     with st.expander(f"✔️ {task.get('titulo', '')}"):
                         st.markdown(f"**Prioridade:** {prioridade} | **Responsável:** {resp}")
                         st.markdown(f"**Solicitante:** {solic}")
-                        st.caption(f"🗓️ Finalizado (Prazo original: {task.get('prazo', '')})")
+                        
+                        # Mostra a data real de resolução
+                        data_res = task.get('data_resolucao', '')
+                        if data_res:
+                            st.markdown(f"<div style='color: #059669; font-size: 14px; font-weight: 600; margin-bottom: 5px;'>✅ Resolvido em: {data_res}</div>", unsafe_allow_html=True)
+                        st.caption(f"🗓️ Prazo original: {task.get('prazo', '')}")
                         
                         hist = str(task.get('resposta', ''))
                         if hist:
@@ -488,9 +505,15 @@ with aba_macro_demandas:
                             if st.form_submit_button("Salvar Nota"):
                                 adicionar_historico(task_id, task.get('resposta', ''), novo_coment)
                                 st.rerun()
+                                
+                        # Permite mover a demanda de volta para produção/fila se resolvido por engano
+                        novo_status = st.selectbox("Mover para:", ["Fila", "Produção", "Resolvido"], index=2, key=f"k3_{task_id}")
+                        if novo_status != 'Resolvido':
+                            # Se tirou de resolvido, apaga a data de resolução para ser marcada novamente no futuro
+                            supabase.table("demandas").update({"status": novo_status, "data_resolucao": ""}).eq("id", task_id).execute()
+                            st.rerun()
 
                         st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
-                        # SOFT DELETE: Transforma o botão deletar num botão de Arquivar
                         if st.button("🗄️ Arquivar Demanda", key=f"arq_{task_id}"):
                             supabase.table("demandas").update({"arquivada": True}).eq("id", task_id).execute()
                             st.rerun()
@@ -512,7 +535,12 @@ with aba_macro_demandas:
     with sub_aba_relatorio:
         st.markdown("<br>", unsafe_allow_html=True)
         if not df_ativas.empty:
-            df_export_demandas = df_ativas[['titulo', 'descricao', 'solicitante', 'responsavel', 'prioridade', 'status', 'prazo']]
+            # Prepara as colunas que vão para a planilha e para a tela
+            colunas_export = ['titulo', 'descricao', 'solicitante', 'responsavel', 'prioridade', 'status', 'prazo']
+            if 'data_resolucao' in df_ativas.columns:
+                colunas_export.append('data_resolucao')
+                
+            df_export_demandas = df_ativas[colunas_export]
             
             csv_demandas = df_export_demandas.to_csv(index=False).encode('utf-8')
             b64_demandas = base64.b64encode(csv_demandas).decode()
