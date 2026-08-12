@@ -329,33 +329,7 @@ with aba_macro_midia:
                 metrica3.metric("🎁 Permutas/Cortesias", len(df_final[df_final['tipo_investimento'] == 'Cortesia']))
                 metrica4.metric("🟢 Pontos Ativos", len(df_final[df_final['status'].isin(['Ativo', 'ok'])]))
                 
-                # MAPA GLOBAL COM FOLIUM
                 st.markdown("<hr style='margin: 30px 0px 10px 0px; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
-                st.markdown("### 🗺️ Mapa Global de Operações")
-                st.caption("Visão geral de todos os pontos georreferenciados na sua busca atual.")
-                
-                if 'latitude' in df_final.columns and 'longitude' in df_final.columns:
-                    df_mapa_global = df_final[['parceiro_local', 'latitude', 'longitude']].copy()
-                    df_mapa_global['lat'] = pd.to_numeric(df_mapa_global['latitude'], errors='coerce')
-                    df_mapa_global['lon'] = pd.to_numeric(df_mapa_global['longitude'], errors='coerce')
-                    df_mapa_global = df_mapa_global.dropna(subset=['lat', 'lon'])
-                    
-                    if not df_mapa_global.empty:
-                        mapa_geral = folium.Map(location=[df_mapa_global['lat'].mean(), df_mapa_global['lon'].mean()], zoom_start=12)
-                        for idx, ponto in df_mapa_global.iterrows():
-                            folium.Marker(
-                                [ponto['lat'], ponto['lon']], 
-                                popup=ponto['parceiro_local'], 
-                                icon=folium.Icon(color="blue", icon="info-sign")
-                            ).add_to(mapa_geral)
-                        
-                        st_folium(mapa_geral, height=500, use_container_width=True, returned_objects=[])
-                    else:
-                        st.info("Nenhum ponto com coordenadas cadastradas encontrado para exibir no mapa global.")
-                else:
-                    st.info("Adicione os campos de latitude e longitude no Supabase para ativar o Mapa Global.")
-
-                st.markdown("<hr style='margin: 10px 0px 30px 0px; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
                 
                 col_graf1, col_graf2, col_graf3 = st.columns(3)
                 with col_graf1: st.markdown("**Por Cidade**"); st.bar_chart(df_final['cidade'].value_counts())
