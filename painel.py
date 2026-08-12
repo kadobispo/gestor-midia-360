@@ -5,6 +5,8 @@ import base64
 import uuid
 from datetime import date, datetime, timedelta, timezone
 import requests
+import folium
+from streamlit_folium import st_folium
 
 # ==========================================
 # CONFIGURAÇÃO E ESTILIZAÇÃO
@@ -79,7 +81,8 @@ def excluir_imagem(url_imagem):
         nome_arquivo = url_imagem.split('/')[-1]
         supabase.storage.from_("fotos_midia").remove([nome_arquivo])
         return True
-    except Exception: return False
+    except Exception:
+        return False
 
 def carregar_dados():
     response = supabase.table("campanhas").select("*").execute()
@@ -222,7 +225,7 @@ with aba_macro_midia:
 
                         st.info(f"**📣 Detalhe da Publicidade:** {row.get('publicidade', 'Não especificado')}")
 
-                        # DIVISÃO LADO A LADO: FOTO E MAPA
+                        # DIVISÃO LADO A LADO: FOTO E MAPA PROFISSIONAL
                         st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
                         col_foto, col_mapa = st.columns(2)
                         
@@ -248,8 +251,17 @@ with aba_macro_midia:
                             
                             if lat and lon and str(lat).strip() != "" and str(lon).strip() != "":
                                 try:
-                                    df_pino = pd.DataFrame({'lat': [float(lat)], 'lon': [float(lon)]})
-                                    st.map(df_pino, zoom=14, use_container_width=True)
+                                    lat_f = float(lat)
+                                    lon_f = float(lon)
+                                    # Criação do mapa elegante com Folium
+                                    mapa_local = folium.Map(location=[lat_f, lon_f], zoom_start=15)
+                                    folium.Marker(
+                                        [lat_f, lon_f], 
+                                        popup=row.get('parceiro_local', 'Ponto de Mídia'), 
+                                        icon=folium.Icon(color="red", icon="info-sign")
+                                    ).add_to(mapa_local)
+                                    
+                                    st_folium(mapa_local, height=300, use_container_width=True, returned_objects=[])
                                 except:
                                     st.warning("⚠️ Coordenadas inválidas. Certifique-se de que estão no formato correto (ex: -10.947, -37.073).")
                             else:
@@ -268,7 +280,6 @@ with aba_macro_midia:
                                     e_responsavel = st.text_input("Responsável", value=str(row.get('responsavel', '')))
                                     e_contato = st.text_input("Telefone", value=str(row.get('contato', '')))
                                     e_publicidade = st.text_input("Detalhe da Publicidade", value=str(row.get('publicidade', '')))
-                                    # Novos campos de mapa na edição
                                     e_lat = st.text_input("Latitude (Ex: -10.9472)", value=str(row.get('latitude', '')))
                                 with ec3:
                                     e_data = st.text_input("Vencimento/Renovação", value=str(row.get('data_fim', '')))
@@ -281,7 +292,6 @@ with aba_macro_midia:
                                     else:
                                         e_valor = 0.0
                                         tipo_salvar = "Cortesia"
-                                    # Novos campos de mapa na edição
                                     e_lon = st.text_input("Longitude (Ex: -37.0731)", value=str(row.get('longitude', '')))
 
                                 if st.form_submit_button("💾 Guardar Alterações"):
@@ -299,7 +309,6 @@ with aba_macro_midia:
                                         "imagem_path": url_nova_foto, "data_upload_foto": data_upload
                                     }
                                     
-                                    # Tenta salvar as coordenadas com segurança, ignorando se não existirem no banco ainda
                                     try: dados_atualizar['latitude'] = e_lat
                                     except: pass
                                     try: dados_atualizar['longitude'] = e_lon
@@ -320,12 +329,11 @@ with aba_macro_midia:
                 metrica3.metric("🎁 Permutas/Cortesias", len(df_final[df_final['tipo_investimento'] == 'Cortesia']))
                 metrica4.metric("🟢 Pontos Ativos", len(df_final[df_final['status'].isin(['Ativo', 'ok'])]))
                 
-                # MAPA GLOBAL DO DASHBOARD
+                # MAPA GLOBAL COM FOLIUM
                 st.markdown("<hr style='margin: 30px 0px 10px 0px; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
                 st.markdown("### 🗺️ Mapa Global de Operações")
                 st.caption("Visão geral de todos os pontos georreferenciados na sua busca atual.")
                 
-                # Prepara os dados para o mapa global
                 if 'latitude' in df_final.columns and 'longitude' in df_final.columns:
                     df_mapa_global = df_final[['parceiro_local', 'latitude', 'longitude']].copy()
                     df_mapa_global['lat'] = pd.to_numeric(df_mapa_global['latitude'], errors='coerce')
@@ -333,7 +341,15 @@ with aba_macro_midia:
                     df_mapa_global = df_mapa_global.dropna(subset=['lat', 'lon'])
                     
                     if not df_mapa_global.empty:
-                        st.map(df_mapa_global, use_container_width=True)
+                        mapa_geral = folium.Map(location=[df_mapa_global['lat'].mean(), df_mapa_global['lon'].mean()], zoom_start=12)
+                        for idx, ponto in df_mapa_global.iterrows():
+                            folium.Marker(
+                                [ponto['lat'], ponto['lon']], 
+                                popup=ponto['parceiro_local'], 
+                                icon=folium.Icon(color="blue", icon="info-sign")
+                            ).add_to(mapa_geral)
+                        
+                        st_folium(mapa_geral, height=500, use_container_width=True, returned_objects=[])
                     else:
                         st.info("Nenhum ponto com coordenadas cadastradas encontrado para exibir no mapa global.")
                 else:
