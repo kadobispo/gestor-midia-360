@@ -225,7 +225,7 @@ with aba_macro_midia:
 
                         st.info(f"**📣 Detalhe da Publicidade:** {row.get('publicidade', 'Não especificado')}")
 
-                        # DIVISÃO LADO A LADO: FOTO E MAPA PROFISSIONAL
+                        # DIVISÃO LADO A LADO: FOTO E MAPA COM BOTÕES DE ROTA
                         st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
                         col_foto, col_mapa = st.columns(2)
                         
@@ -253,7 +253,6 @@ with aba_macro_midia:
                                 try:
                                     lat_f = float(lat)
                                     lon_f = float(lon)
-                                    # Criação do mapa elegante com Folium
                                     mapa_local = folium.Map(location=[lat_f, lon_f], zoom_start=15)
                                     folium.Marker(
                                         [lat_f, lon_f], 
@@ -261,7 +260,16 @@ with aba_macro_midia:
                                         icon=folium.Icon(color="red", icon="info-sign")
                                     ).add_to(mapa_local)
                                     
-                                    st_folium(mapa_local, height=300, use_container_width=True, returned_objects=[])
+                                    st_folium(mapa_local, height=500, use_container_width=True, returned_objects=[])
+                                    
+                                    # BOTÕES DE AÇÃO RÁPIDA (GPS e Street View)
+                                    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                                    c_btn1, c_btn2 = st.columns(2)
+                                    with c_btn1:
+                                        st.link_button("🚗 Traçar Rota (GPS)", f"https://www.google.com/maps/dir/?api=1&destination={lat_f},{lon_f}", use_container_width=True)
+                                    with c_btn2:
+                                        st.link_button("🛣️ Street View", f"https://www.google.com/maps?layer=c&cbll={lat_f},{lon_f}", use_container_width=True)
+
                                 except:
                                     st.warning("⚠️ Coordenadas inválidas. Certifique-se de que estão no formato correto (ex: -10.947, -37.073).")
                             else:
